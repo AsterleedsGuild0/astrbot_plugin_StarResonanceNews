@@ -25,6 +25,7 @@ HELP_COMMANDS = {"星痕新闻帮助"}
 SUMMARY_COMMAND = "星痕新闻总结"
 PUSH_ENABLE_COMMANDS = {"星痕新闻推送开启", "星痕新闻推送启用", "开启星痕新闻推送"}
 PUSH_DISABLE_COMMANDS = {"星痕新闻推送关闭", "星痕新闻推送禁用", "关闭星痕新闻推送"}
+PUSH_STATUS_COMMANDS = {"星痕新闻推送状态"}
 
 
 class StarResonanceNewsPlugin(Star):
@@ -269,6 +270,11 @@ class StarResonanceNewsPlugin(Star):
         if message in PUSH_DISABLE_COMMANDS:
             event.stop_event()
             yield event.plain_result(await self._set_current_group_push(event, False))
+            return
+
+        if message in PUSH_STATUS_COMMANDS:
+            event.stop_event()
+            yield event.plain_result(self._status_text(event))
             return
 
     @filter.command(
