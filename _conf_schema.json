@@ -1,0 +1,118 @@
+{
+  "polling_enabled": {
+    "description": "启用自动轮询",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后插件不会启动定时任务，仅支持手动查询。"
+  },
+  "polling_interval_seconds": {
+    "description": "轮询间隔（秒）",
+    "type": "int",
+    "default": 300,
+    "slider": { "min": 60, "max": 3600, "step": 30 },
+    "hint": "两次轮询之间的间隔，最小 60 秒，默认 300 秒（5 分钟）。"
+  },
+  "target_sessions": {
+    "description": "推送会话列表（完整 session 格式）",
+    "type": "list",
+    "default": [],
+    "hint": "格式: {platform}:GroupMessage:{group_id}，例如 aiocqhttp:GroupMessage:123456789。留空则使用下方 push_groups。"
+  },
+  "push_groups": {
+    "description": "推送群 ID 列表",
+    "type": "list",
+    "default": [],
+    "hint": "简单配置方式：填入群号即可，配合 platform_name 自动生成推送会话。"
+  },
+  "platform_name": {
+    "description": "消息平台名称",
+    "type": "string",
+    "default": "aiocqhttp",
+    "hint": "当前使用的 AstrBot 适配器平台名称，如 aiocqhttp、qqofficial 等。用于从 push_groups 构造推送会话。"
+  },
+  "default_query_count": {
+    "description": "手动查询默认返回条数",
+    "type": "int",
+    "default": 5,
+    "slider": { "min": 1, "max": 20, "step": 1 }
+  },
+  "max_query_count": {
+    "description": "手动查询最大返回条数",
+    "type": "int",
+    "default": 10,
+    "slider": { "min": 1, "max": 20, "step": 1 },
+    "hint": "用于限制 default_query_count 的实际生效上限，避免单次消息过长。"
+  },
+  "max_push_count_per_poll": {
+    "description": "单次轮询最多推送条数",
+    "type": "int",
+    "default": 5,
+    "slider": { "min": 1, "max": 20, "step": 1 }
+  },
+  "admin_users": {
+    "description": "插件管理员列表",
+    "type": "list",
+    "default": [],
+    "hint": "拥有管理权限的用户，可执行需要权限的命令。"
+  },
+  "request_timeout_seconds": {
+    "description": "HTTP 请求超时（秒）",
+    "type": "int",
+    "default": 15,
+    "slider": { "min": 5, "max": 60, "step": 5 }
+  },
+  "request_verify_ssl": {
+    "description": "校验 SSL 证书",
+    "type": "bool",
+    "default": false,
+    "hint": "参考实现默认关闭校验，可按环境调整。"
+  },
+  "request_proxy": {
+    "description": "HTTP 请求代理地址",
+    "type": "string",
+    "default": "",
+    "hint": "空字符串表示不使用代理，例如 http://127.0.0.1:7890"
+  },
+  "include_publish_time": {
+    "description": "消息中包含发布时间",
+    "type": "bool",
+    "default": true
+  },
+  "ai_summary_enabled": {
+    "description": "启用 AI 总结",
+    "type": "bool",
+    "default": true,
+    "hint": "启用后可使用“星痕新闻总结”提取新闻详情页全文并调用 AstrBot LLM 总结。"
+  },
+  "ai_summary_provider_id": {
+    "description": "AI 总结模型",
+    "type": "string",
+    "default": "",
+    "_special": "select_provider",
+    "hint": "只从 AstrBot 已启用的 Chat Provider 中选择。留空时使用当前会话默认模型。"
+  },
+  "ai_summary_max_article_chars": {
+    "description": "AI 总结正文最大字符数",
+    "type": "int",
+    "default": 12000,
+    "slider": { "min": 1000, "max": 50000, "step": 1000 },
+    "hint": "详情页正文过长时会截断后再交给模型，避免上下文过长。"
+  },
+  "ai_summary_prompt": {
+    "description": "AI 总结提示词",
+    "type": "text",
+    "default": "请用中文总结以下《星痕共鸣》官网新闻。要求：\n1. 先用一句话说明核心消息。\n2. 再列出 3 到 5 条要点。\n3. 如果是维护/活动公告，请特别提取时间、补偿、参与条件、奖励、影响范围。\n4. 不要编造正文中没有的信息。",
+    "hint": "会和新闻标题、链接、正文一起发送给 AstrBot LLM。"
+  },
+  "storage_filename": {
+    "description": "数据文件名",
+    "type": "string",
+    "default": "star_resonance_news.json",
+    "hint": "缓存数据文件名，位于 AstrBot 插件数据目录。"
+  },
+  "permission_denied_notice": {
+    "description": "权限不足时发送提示",
+    "type": "bool",
+    "default": true
+  }
+}

@@ -1,0 +1,7 @@
+name: astrbot_plugin_StarResonanceNews
+display_name: 星痕共鸣国服新闻
+desc: 星痕共鸣（Star Resonance）国服官网新闻查询与自动推送插件。支持命令查看、定时轮询、基于 iNewsId 去重持久化缓存。
+version: v0.1.0
+author: summery233
+repo: https://github.com/summery233/astrbot_plugin_StarResonanceNews
+astrbot_version: ">=4.11.2"

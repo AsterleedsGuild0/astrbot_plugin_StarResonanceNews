@@ -1,0 +1,1 @@
+"""AstrBot StarResonanceNews plugin package."""
