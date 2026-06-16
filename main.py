@@ -8,6 +8,7 @@ from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, MessageChain, filter
 from astrbot.api.event import MessageEventResult
 from astrbot.api.star import Context, Star, StarTools
+from astrbot.core import html_renderer
 
 from .core.spider import CnSpider, NewsItem
 from .core.store import NewsStore
@@ -225,7 +226,7 @@ class StarResonanceNewsPlugin(Star):
 
         if message == SUMMARY_COMMAND or message.startswith(f"{SUMMARY_COMMAND} "):
             event.stop_event()
-            yield self._summary_result(
+            yield await self._summary_result(
                 event, await self._summarize_news(event, message)
             )
             return
@@ -286,7 +287,7 @@ class StarResonanceNewsPlugin(Star):
     @filter.command(SUMMARY_COMMAND)
     async def summarize_news(self, event: AstrMessageEvent):
         """提取新闻详情页全文，并调用 AstrBot 已启用的 LLM 总结。"""
-        yield self._summary_result(
+        yield await self._summary_result(
             event,
             await self._summarize_news(event, (event.get_message_str() or "").strip()),
         )
@@ -385,14 +386,66 @@ class StarResonanceNewsPlugin(Star):
             ]
         )
 
-    def _summary_result(self, event: AstrMessageEvent, text: str) -> MessageEventResult:
-        result = event.plain_result(text)
+    async def _summary_result(
+        self, event: AstrMessageEvent, text: str
+    ) -> MessageEventResult:
         if not self.config.get("ai_summary_t2i_enabled", True):
-            return result
+            return event.plain_result(text)
+
         threshold = max(0, int(self.config.get("ai_summary_t2i_threshold", 800)))
-        if len(text) >= threshold:
-            result.use_t2i(True)
-        return result
+        if len(text) < threshold:
+            logger.debug(
+                f"[星痕共鸣新闻] AI总结长度 {len(text)} 未达到 T2I 阈值 {threshold}，使用文本发送"
+            )
+            return event.plain_result(text)
+
+        logger.info(
+            f"[星痕共鸣新闻] AI总结长度 {len(text)} 达到 T2I 阈值 {threshold}，尝试插件内直接渲染"
+        )
+        try:
+            rendered = await self._render_summary_t2i(text)
+            image_result = self._image_result_from_rendered(event, rendered)
+            if image_result:
+                logger.info("[星痕共鸣新闻] AI总结 T2I 渲染成功")
+                return image_result
+            logger.warning(
+                f"[星痕共鸣新闻] AI总结 T2I 返回不可识别结果: {type(rendered).__name__}"
+            )
+        except Exception as e:
+            logger.error(
+                f"[星痕共鸣新闻] AI总结 T2I 渲染失败，回退文本: {type(e).__name__}: {e}"
+            )
+        return event.plain_result(text)
+
+    async def _render_summary_t2i(self, text: str) -> object:
+        astrbot_config = self.context.get_config()
+        use_network = str(astrbot_config.get("t2i_strategy", "remote")) == "remote"
+        template_name = astrbot_config.get("t2i_active_template", "base")
+        return await html_renderer.render_t2i(
+            text,
+            return_url=True,
+            use_network=use_network,
+            template_name=template_name,
+        )
+
+    @staticmethod
+    def _image_result_from_rendered(
+        event: AstrMessageEvent, rendered: object
+    ) -> MessageEventResult | None:
+        if isinstance(rendered, bytes):
+            return MessageEventResult(chain=[Comp.Image.fromBytes(rendered)])
+        if not isinstance(rendered, str) or not rendered.strip():
+            return None
+
+        value = rendered.strip()
+        if value.startswith("http://") or value.startswith("https://"):
+            return event.image_result(value)
+        if value.startswith("base64://"):
+            return MessageEventResult(
+                chain=[Comp.Image.fromBase64(value.removeprefix("base64://"))]
+            )
+        path = value.removeprefix("file://") if value.startswith("file://") else value
+        return event.image_result(path)
 
     async def _summarize_news(self, event: AstrMessageEvent, message: str) -> str:
         if not self.config.get("ai_summary_enabled", True):

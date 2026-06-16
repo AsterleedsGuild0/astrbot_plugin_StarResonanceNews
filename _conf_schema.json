@@ -102,7 +102,7 @@
     "description": "AI 总结过长时转图片",
     "type": "bool",
     "default": true,
-    "hint": "启用后，AI 总结结果达到阈值时会强制使用 AstrBot 默认 T2I 管线渲染为图片；T2I 失败时由 AstrBot 核心回退文本。"
+    "hint": "启用后，AI 总结结果达到阈值时会在插件内直接调用 AstrBot T2I 渲染为图片；T2I 失败时回退文本。"
   },
   "ai_summary_t2i_threshold": {
     "description": "AI 总结转图片阈值",

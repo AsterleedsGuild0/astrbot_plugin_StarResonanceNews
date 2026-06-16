@@ -16,7 +16,7 @@
 - 持久化缓存：插件重启后不重复推送旧新闻
 - 首次启动只建立缓存，不推送历史新闻
 - AI 总结：提取新闻详情页全文，并调用 AstrBot 已启用的默认或指定 LLM 总结
-- AI 总结过长时可接入 AstrBot 默认 T2I 管线渲染为图片，减少刷屏
+- AI 总结过长时可在插件内直接调用 AstrBot T2I 渲染为图片，减少刷屏
 - 可配置轮询开关、间隔、推送目标、请求超时、最大推送条数等
 - 随包提供 `skills/SKILL.md`，让 AstrBot LLM 能知道插件用途、命令和限制
 
@@ -100,7 +100,7 @@ python scripts/package_plugin.py --dev-version
 | `ai_summary_enabled` | `bool` | `true` | 是否启用 AI 总结命令 |
 | `ai_summary_provider_id` | `string` | `""` | AI 总结使用的 AstrBot Chat Provider ID，留空使用当前会话默认模型 |
 | `ai_summary_max_article_chars` | `int` | `12000` | 详情页正文交给模型前的最大字符数 |
-| `ai_summary_t2i_enabled` | `bool` | `true` | AI 总结结果过长时是否强制使用 AstrBot T2I 转图片 |
+| `ai_summary_t2i_enabled` | `bool` | `true` | AI 总结结果过长时是否在插件内直接调用 AstrBot T2I 转图片 |
 | `ai_summary_t2i_threshold` | `int` | `800` | AI 总结结果达到该字符数时转图片，设为 0 表示总是转图片 |
 | `ai_summary_prompt` | `text` | 见配置页 | AI 总结提示词 |
 | `storage_filename` | `string` | `star_resonance_news.json` | 数据文件名 |
@@ -116,9 +116,10 @@ python scripts/package_plugin.py --dev-version
 
 由于新闻总结可能较长，插件提供 `ai_summary_t2i_enabled` 与 `ai_summary_t2i_threshold`：
 
-- 开启后，AI 总结文本长度达到阈值时，插件会对该消息调用 `use_t2i(True)`，交给 AstrBot 默认 T2I 管线渲染为图片。
+- 开启后，AI 总结文本长度达到阈值时，插件会在返回消息前直接调用 AstrBot `html_renderer.render_t2i()` 渲染为图片。
 - T2I 端点、渲染模板、remote/local 策略等仍沿用 AstrBot 全局 T2I 配置。
-- 如果 T2I 渲染失败，AstrBot 核心会记录错误并回退文本发送。
+- 如果 T2I 渲染失败，插件会记录错误并回退文本发送。
+- 该方式不依赖 `ResultDecorateStage` 的后续 `use_t2i(True)` 装饰链，避免被其他插件的装饰 hook 截断。
 - 阈值设为 `0` 时，所有 AI 总结都尝试转图片。
 
 ### 推送目标配置
@@ -167,7 +168,7 @@ AstrBot 启用插件 Skill 后，LLM 可通过该文档了解本插件的使用�
 - [x] 推送状态查看与管理员手动检查更新
 - [x] 新闻详情页全文提取 + AstrBot LLM AI 总结
 - [x] AI 总结模型可配置为已启用 Chat Provider，留空使用当前会话默认模型
-- [x] AI 总结长文本接入 AstrBot 默认 T2I 管线转图片
+- [x] AI 总结长文本在插件内直接调用 AstrBot T2I 转图片
 
 暂未实现（P1 / 后续版本）：
 
