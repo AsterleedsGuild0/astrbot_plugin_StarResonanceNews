@@ -23,6 +23,8 @@ QUERY_COMMANDS = {
 }
 HELP_COMMANDS = {"星痕新闻帮助"}
 SUMMARY_COMMAND = "星痕新闻总结"
+PUSH_ENABLE_COMMANDS = {"星痕新闻推送开启", "星痕新闻推送启用", "开启星痕新闻推送"}
+PUSH_DISABLE_COMMANDS = {"星痕新闻推送关闭", "星痕新闻推送禁用", "关闭星痕新闻推送"}
 
 
 class StarResonanceNewsPlugin(Star):
@@ -170,8 +172,26 @@ class StarResonanceNewsPlugin(Star):
             try:
                 await self.context.send_message(session, chain)
                 logger.debug(f"[星痕共鸣新闻] 已推送至 {session}")
+                await self._push_news_summaries(session, items)
             except Exception as e:
                 logger.error(f"[星痕共鸣新闻] 推送失败 session={session}: {e}")
+
+    async def _push_news_summaries(self, session: str, items: list[NewsItem]) -> None:
+        if not self.config.get("ai_summary_enabled", True):
+            return
+        if not self.config.get("auto_summary_on_push", True):
+            return
+
+        for item in items:
+            try:
+                summary_text = await self._summarize_news_item(item, session)
+                chain = await self._summary_chain(summary_text)
+                await self.context.send_message(session, chain)
+                logger.debug(f"[星痕共鸣新闻] 已推送新闻总结至 {session}: {item.idx}")
+            except Exception as e:
+                logger.error(
+                    f"[星痕共鸣新闻] 自动推送新闻总结失败 session={session} news={item.idx}: {type(e).__name__}: {e}"
+                )
 
     def _get_target_sessions(self) -> list[str]:
         """Build target session list from config.
@@ -202,6 +222,11 @@ class StarResonanceNewsPlugin(Star):
                     candidate = f"{platform}:GroupMessage:{gid_str}"
                     if candidate not in sessions:
                         sessions.append(candidate)
+
+        # Runtime group subscriptions, disabled by default until a group enables it.
+        for session in self.store.get_enabled_subscription_sessions():
+            if session not in sessions:
+                sessions.append(session)
 
         return sessions
 
@@ -234,6 +259,16 @@ class StarResonanceNewsPlugin(Star):
         if message == "星痕新闻总结模型":
             event.stop_event()
             yield event.plain_result(self._enabled_summary_models_text(event))
+            return
+
+        if message in PUSH_ENABLE_COMMANDS:
+            event.stop_event()
+            yield event.plain_result(await self._set_current_group_push(event, True))
+            return
+
+        if message in PUSH_DISABLE_COMMANDS:
+            event.stop_event()
+            yield event.plain_result(await self._set_current_group_push(event, False))
             return
 
     @filter.command(
@@ -300,7 +335,17 @@ class StarResonanceNewsPlugin(Star):
     @filter.command("星痕新闻推送状态")
     async def news_status(self, event: AstrMessageEvent):
         """显示插件轮询与缓存状态."""
-        yield event.plain_result(self._status_text())
+        yield event.plain_result(self._status_text(event))
+
+    @filter.command("星痕新闻推送开启", alias={"星痕新闻推送启用", "开启星痕新闻推送"})
+    async def enable_group_push(self, event: AstrMessageEvent):
+        """开启当前群的星痕新闻推送。"""
+        yield event.plain_result(await self._set_current_group_push(event, True))
+
+    @filter.command("星痕新闻推送关闭", alias={"星痕新闻推送禁用", "关闭星痕新闻推送"})
+    async def disable_group_push(self, event: AstrMessageEvent):
+        """关闭当前群的星痕新闻推送。"""
+        yield event.plain_result(await self._set_current_group_push(event, False))
 
     @filter.command("星痕新闻检查更新")
     async def manual_check_update(self, event: AstrMessageEvent):
@@ -347,6 +392,7 @@ class StarResonanceNewsPlugin(Star):
   星痕官网公告
   星痕新闻总结 [序号/新闻ID/链接]
   星痕新闻总结模型
+  星痕新闻推送开启 / 星痕新闻推送关闭
   星痕新闻推送状态
   星痕新闻检查更新（管理员）
 
@@ -366,48 +412,75 @@ class StarResonanceNewsPlugin(Star):
 
 配置项说明请在插件 WebUI 中查看。""".strip()
 
-    def _status_text(self) -> str:
+    def _status_text(self, event: AstrMessageEvent | None = None) -> str:
         sessions = self._get_target_sessions()
         summary_provider_id = str(self.config.get("ai_summary_provider_id", "") or "")
+        current_subscription = "非群聊"
+        if event and event.get_group_id():
+            current_subscription = (
+                "开启"
+                if self.store.is_subscription_enabled(event.unified_msg_origin)
+                else "关闭"
+            )
         return "\n".join(
             [
                 "星痕共鸣国服新闻推送状态",
                 f"自动轮询: {bool(self.config.get('polling_enabled', True))}",
                 f"轮询任务运行中: {self._poller_task is not None and not self._poller_task.done()}",
                 f"轮询间隔: {max(60, int(self.config.get('polling_interval_seconds', 300)))} 秒",
+                f"当前群推送: {current_subscription}",
                 f"推送目标数: {len(sessions)}",
+                f"群订阅数: {len(self.store.get_enabled_subscription_sessions())}",
                 f"已见新闻数: {len(self.store.get_seen_ids())}",
                 f"缓存新闻数: {len(self.store.cached_items)}",
                 f"最近成功: {self.store.last_success_at or '暂无'}",
                 f"最近错误: {self.store.last_error or '无'}",
                 f"AI总结: {bool(self.config.get('ai_summary_enabled', True))}",
+                f"推送后自动总结: {bool(self.config.get('auto_summary_on_push', True))}",
                 f"AI总结模型: {summary_provider_id or '当前会话默认模型'}",
                 f"AI总结转图片: {bool(self.config.get('ai_summary_t2i_enabled', True))}",
             ]
         )
 
+    async def _set_current_group_push(
+        self, event: AstrMessageEvent, enabled: bool
+    ) -> str:
+        if not event.get_group_id():
+            return "该命令仅支持在群聊中使用。"
+        if not await self._is_plugin_admin(event):
+            return self._permission_denied("星痕新闻推送开关仅限管理员使用。")
+
+        session = event.unified_msg_origin
+        self.store.set_subscription(session, enabled)
+        await self.store.save()
+        return "本群已开启星痕新闻推送。" if enabled else "本群已关闭星痕新闻推送。"
+
     async def _summary_result(
         self, event: AstrMessageEvent, text: str
     ) -> MessageEventResult:
+        chain = await self._summary_chain(text)
+        return MessageEventResult(chain=chain.chain)
+
+    async def _summary_chain(self, text: str) -> MessageChain:
         if not self.config.get("ai_summary_t2i_enabled", True):
-            return event.plain_result(text)
+            return MessageChain([Comp.Plain(text)])
 
         threshold = max(0, int(self.config.get("ai_summary_t2i_threshold", 800)))
         if len(text) < threshold:
             logger.debug(
                 f"[星痕共鸣新闻] AI总结长度 {len(text)} 未达到 T2I 阈值 {threshold}，使用文本发送"
             )
-            return event.plain_result(text)
+            return MessageChain([Comp.Plain(text)])
 
         logger.info(
             f"[星痕共鸣新闻] AI总结长度 {len(text)} 达到 T2I 阈值 {threshold}，尝试插件内直接渲染"
         )
         try:
             rendered = await self._render_summary_t2i(text)
-            image_result = self._image_result_from_rendered(event, rendered)
-            if image_result:
+            image_chain = self._image_chain_from_rendered(rendered)
+            if image_chain:
                 logger.info("[星痕共鸣新闻] AI总结 T2I 渲染成功")
-                return image_result
+                return image_chain
             logger.warning(
                 f"[星痕共鸣新闻] AI总结 T2I 返回不可识别结果: {type(rendered).__name__}"
             )
@@ -415,7 +488,7 @@ class StarResonanceNewsPlugin(Star):
             logger.error(
                 f"[星痕共鸣新闻] AI总结 T2I 渲染失败，回退文本: {type(e).__name__}: {e}"
             )
-        return event.plain_result(text)
+        return MessageChain([Comp.Plain(text)])
 
     async def _render_summary_t2i(self, text: str) -> object:
         astrbot_config = self.context.get_config()
@@ -429,23 +502,21 @@ class StarResonanceNewsPlugin(Star):
         )
 
     @staticmethod
-    def _image_result_from_rendered(
-        event: AstrMessageEvent, rendered: object
-    ) -> MessageEventResult | None:
+    def _image_chain_from_rendered(rendered: object) -> MessageChain | None:
         if isinstance(rendered, bytes):
-            return MessageEventResult(chain=[Comp.Image.fromBytes(rendered)])
+            return MessageChain([Comp.Image.fromBytes(rendered)])
         if not isinstance(rendered, str) or not rendered.strip():
             return None
 
         value = rendered.strip()
         if value.startswith("http://") or value.startswith("https://"):
-            return event.image_result(value)
+            return MessageChain([Comp.Image.fromURL(value)])
         if value.startswith("base64://"):
-            return MessageEventResult(
-                chain=[Comp.Image.fromBase64(value.removeprefix("base64://"))]
+            return MessageChain(
+                [Comp.Image.fromBase64(value.removeprefix("base64://"))]
             )
         path = value.removeprefix("file://") if value.startswith("file://") else value
-        return event.image_result(path)
+        return MessageChain([Comp.Image.fromFileSystem(path)])
 
     async def _summarize_news(self, event: AstrMessageEvent, message: str) -> str:
         if not self.config.get("ai_summary_enabled", True):
@@ -455,29 +526,31 @@ class StarResonanceNewsPlugin(Star):
             item = await self._resolve_summary_item(message)
             if not item.url:
                 return "未找到可用于提取全文的新闻详情链接。"
-
-            article_text = await self.spider.fetch_article_text(item.url)
-            max_chars = max(
-                1000, int(self.config.get("ai_summary_max_article_chars", 12000))
-            )
-            if len(article_text) > max_chars:
-                article_text = article_text[:max_chars] + "\n……（正文过长，已截断）"
-
-            provider_id = await self._resolve_summary_provider_id(event)
-            prompt = self._build_summary_prompt(item, article_text)
-            response = await self.context.llm_generate(
-                chat_provider_id=provider_id,
-                prompt=prompt,
-                system_prompt="你是一个谨慎的中文新闻摘要助手，只能基于用户提供的新闻正文总结，不编造信息。",
-            )
-            summary = (getattr(response, "completion_text", "") or "").strip()
-            if not summary:
-                return "AI 总结失败：模型未返回有效内容。"
-
-            return f"{item.title or '星痕共鸣官网新闻'}\n{item.url}\n\nAI 总结：\n{summary}"
+            return await self._summarize_news_item(item, event.unified_msg_origin)
         except Exception as e:
             logger.error(f"[星痕共鸣新闻] AI 总结失败: {type(e).__name__}: {e}")
             return f"AI 总结失败: {type(e).__name__}: {e}"
+
+    async def _summarize_news_item(self, item: NewsItem, umo: str | None = None) -> str:
+        article_text = await self.spider.fetch_article_text(item.url)
+        max_chars = max(
+            1000, int(self.config.get("ai_summary_max_article_chars", 12000))
+        )
+        if len(article_text) > max_chars:
+            article_text = article_text[:max_chars] + "\n……（正文过长，已截断）"
+
+        provider_id = await self._resolve_summary_provider_id(umo=umo)
+        prompt = self._build_summary_prompt(item, article_text)
+        response = await self.context.llm_generate(
+            chat_provider_id=provider_id,
+            prompt=prompt,
+            system_prompt="你是一个谨慎的中文新闻摘要助手，只能基于用户提供的新闻正文总结，不编造信息。",
+        )
+        summary = (getattr(response, "completion_text", "") or "").strip()
+        if not summary:
+            return "AI 总结失败：模型未返回有效内容。"
+
+        return f"{item.title or '星痕共鸣官网新闻'}\n{item.url}\n\nAI 总结：\n{summary}"
 
     async def _resolve_summary_item(self, message: str) -> NewsItem:
         arg = message.removeprefix(SUMMARY_COMMAND).strip()
@@ -523,7 +596,9 @@ class StarResonanceNewsPlugin(Star):
         except Exception:
             return self.store.get_cached_items()
 
-    async def _resolve_summary_provider_id(self, event: AstrMessageEvent) -> str:
+    async def _resolve_summary_provider_id(
+        self, event: AstrMessageEvent | None = None, umo: str | None = None
+    ) -> str:
         configured = str(self.config.get("ai_summary_provider_id", "") or "").strip()
         enabled_ids = self._enabled_chat_provider_ids()
         if configured:
@@ -535,10 +610,12 @@ class StarResonanceNewsPlugin(Star):
 
         try:
             provider_id = await self.context.get_current_chat_provider_id(
-                event.unified_msg_origin
+                umo or (event.unified_msg_origin if event else "")
             )
         except Exception:
-            provider = self.context.get_using_provider(event.unified_msg_origin)
+            provider = self.context.get_using_provider(
+                umo or (event.unified_msg_origin if event else None)
+            )
             provider_id = provider.meta().id if provider else ""
         if not provider_id:
             raise ValueError("AstrBot 当前没有可用的默认聊天模型")

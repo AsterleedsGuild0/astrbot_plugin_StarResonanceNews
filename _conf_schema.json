@@ -84,6 +84,12 @@
     "default": true,
     "hint": "启用后可使用“星痕新闻总结”提取新闻详情页全文并调用 AstrBot LLM 总结。"
   },
+  "auto_summary_on_push": {
+    "description": "推送新闻后自动总结",
+    "type": "bool",
+    "default": true,
+    "hint": "自动轮询发现新新闻并推送后，继续对推送的新闻生成 AI 总结并发送到同一会话。"
+  },
   "ai_summary_provider_id": {
     "description": "AI 总结模型",
     "type": "string",

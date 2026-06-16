@@ -12,10 +12,12 @@
 - 查询最近 5 条（可配置）星痕共鸣国服官网新闻
 - 新闻包含标题、发布时间、官网详情链接
 - 自动轮询：默认每 5 分钟检测官网新闻更新
+- 群聊订阅默认关闭，可由管理员在当前群开启或关闭星痕新闻推送
 - 基于 `iNewsId` 去重，避免重复推送
 - 持久化缓存：插件重启后不重复推送旧新闻
 - 首次启动只建立缓存，不推送历史新闻
 - AI 总结：提取新闻详情页全文，并调用 AstrBot 已启用的默认或指定 LLM 总结
+- 自动推送新新闻后，可继续自动推送该新闻的 AI 总结
 - AI 总结过长时可在插件内直接调用 AstrBot T2I 渲染为图片，减少刷屏
 - 可配置轮询开关、间隔、推送目标、请求超时、最大推送条数等
 - 随包提供 `skills/SKILL.md`，让 AstrBot LLM 能知道插件用途、命令和限制
@@ -67,6 +69,8 @@ python scripts/package_plugin.py --dev-version
 | `星痕新闻总结 <newsid>` | 总结指定新闻 ID 对应的详情页 |
 | `星痕新闻总结 <链接>` | 总结指定官网新闻详情链接 |
 | `星痕新闻总结模型` | 查看当前 AstrBot 已启用的可用 Chat Provider |
+| `星痕新闻推送开启` | 管理员开启当前群聊星痕新闻自动推送 |
+| `星痕新闻推送关闭` | 管理员关闭当前群聊星痕新闻自动推送 |
 | `星痕新闻推送状态` | 查看自动轮询、缓存和最近错误状态 |
 | `星痕新闻检查更新` | 管理员手动检查并推送新增新闻 |
 
@@ -74,7 +78,9 @@ python scripts/package_plugin.py --dev-version
 
 插件启动后按配置间隔自动轮询官网接口：
 
-- 发现新新闻时推送至配置群
+- 群聊默认不订阅新闻推送，需要管理员发送 `星痕新闻推送开启`
+- 发现新新闻时推送至已订阅群或 WebUI 配置的固定推送目标
+- 推送新闻后默认继续推送对应 AI 总结，可用 `auto_summary_on_push` 关闭
 - 无新新闻时仅记录日志，不发送群消息
 - 接口异常时记录日志，不影响插件继续运行
 
@@ -98,6 +104,7 @@ python scripts/package_plugin.py --dev-version
 | `request_proxy` | `string` | `""` | HTTP 请求代理地址，空表示不用代理 |
 | `include_publish_time` | `bool` | `true` | 消息中是否包含发布时间 |
 | `ai_summary_enabled` | `bool` | `true` | 是否启用 AI 总结命令 |
+| `auto_summary_on_push` | `bool` | `true` | 自动推送新新闻后是否继续推送该新闻 AI 总结 |
 | `ai_summary_provider_id` | `string` | `""` | AI 总结使用的 AstrBot Chat Provider ID，留空使用当前会话默认模型 |
 | `ai_summary_max_article_chars` | `int` | `12000` | 详情页正文交给模型前的最大字符数 |
 | `ai_summary_t2i_enabled` | `bool` | `true` | AI 总结结果过长时是否在插件内直接调用 AstrBot T2I 转图片 |
@@ -128,6 +135,8 @@ python scripts/package_plugin.py --dev-version
 
 1. **完整 session 格式**（推荐）：`target_sessions`，如 `aiocqhttp:GroupMessage:123456789`
 2. **群 ID + 平台名**：`push_groups` 填入群号，`platform_name` 设置为当前适配器名称
+
+也可以在群聊中由管理员发送 `星痕新闻推送开启` / `星痕新闻推送关闭` 管理当前群订阅。群聊订阅状态会持久化到插件数据文件，默认关闭。
 
 ---
 
@@ -162,11 +171,13 @@ AstrBot 启用插件 Skill 后，LLM 可通过该文档了解本插件的使用�
 
 - [x] 手动查询最近新闻（5 条别名命令）
 - [x] 自动轮询与去重推送
+- [x] 群聊内开启 / 关闭当前群新闻推送，默认关闭
 - [x] 基于 `iNewsId` 的持久化缓存
 - [x] 首次启动仅建立缓存，不推送历史
 - [x] 可配置的轮询开关、间隔、推送目标、超时、推送条数
 - [x] 推送状态查看与管理员手动检查更新
 - [x] 新闻详情页全文提取 + AstrBot LLM AI 总结
+- [x] 自动推送后继续推送对应 AI 总结
 - [x] AI 总结模型可配置为已启用 Chat Provider，留空使用当前会话默认模型
 - [x] AI 总结长文本在插件内直接调用 AstrBot T2I 转图片
 
@@ -174,7 +185,6 @@ AstrBot 启用插件 Skill 后，LLM 可通过该文档了解本插件的使用�
 
 - 按分类查询（公告/新闻/活动）
 - 查询指定数量
-- 群内命令开关推送
 - 刷新 / 清空缓存命令
 - 封面图发送
 - WebUI / Pages 管理

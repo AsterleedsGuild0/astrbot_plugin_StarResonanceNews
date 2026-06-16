@@ -19,8 +19,10 @@
 - 提供 AstrBot 可用的星痕共鸣国服官网新闻查询插件。
 - 支持群聊命令查看最近 5 条官网新闻。
 - 支持按固定间隔自动检测官网新闻更新，并推送新增新闻。
+- 群聊新闻推送默认关闭，支持管理员在当前群开启或关闭订阅。
 - 支持对新闻分类、轮询间隔、推送目标、启动行为等进行配置。
 - 支持提取新闻详情页正文，并调用 AstrBot 已启用的默认或指定 Chat Provider 生成 AI 总结。
+- 支持自动推送新新闻后继续推送对应 AI 总结。
 - 支持 AI 总结过长时在插件内直接调用 AstrBot T2I 转图片，减少长文本刷屏。
 - 插件重启后不重复推送旧新闻，避免刷屏。
 - 兼容 AstrBot 插件体系，尽量保持实现轻量、可维护。
@@ -97,7 +99,7 @@
 
 ### 5.4 自动推送
 
-插件按配置间隔轮询官网接口，和本地缓存的新闻 ID 对比，发现新增新闻后向已订阅群推送。
+插件按配置间隔轮询官网接口，和本地缓存的新闻 ID 对比，发现新增新闻后向已订阅群推送。群聊默认不订阅，需要管理员显式开启。
 
 ### 5.5 新闻缓存
 
@@ -181,6 +183,7 @@
 - 默认轮询间隔为 5 分钟。
 - 默认查询“最新”分类。
 - 发现新增新闻时，向订阅群推送新增条目。
+- 推送新增新闻后，若 `auto_summary_on_push` 为 `true` 且 AI 总结启用，则继续向同一会话推送对应新闻的 AI 总结。
 - 没有新增新闻时只记录日志，不发送群消息。
 - 请求异常时记录日志，不影响插件继续运行。
 
@@ -222,11 +225,13 @@
 
 要求：
 
-- 默认仅 Bot 超级管理员可操作。
-- 可通过配置允许群管理员操作。
+- 仅群聊可用。
+- 群聊默认关闭星痕新闻推送。
+- 默认允许群管理员、群主或 Bot 超级管理员操作。
 - 开启后当前群加入自动推送目标。
 - 关闭后当前群不再接收自动推送，但仍可手动查询。
 - 私聊场景不支持开启群订阅，应返回提示或静默拒绝。
+- 群订阅状态应持久化保存，插件重启后仍生效。
 
 ### 6.7 查看订阅状态
 
@@ -474,8 +479,6 @@ max_query_count: 10
 max_push_count_per_poll: 5
 send_on_startup: false
 mark_existing_as_seen_on_startup: true
-allow_group_admin_manage_subscription: false
-allow_group_admin_check_update: false
 request_timeout_seconds: 15
 request_verify_ssl: false
 request_proxy: ""
@@ -487,6 +490,7 @@ enable_cover_image: false
 include_publish_time: true
 include_summary: false
 ai_summary_enabled: true
+auto_summary_on_push: true
 ai_summary_provider_id: ""
 ai_summary_max_article_chars: 12000
 ai_summary_t2i_enabled: true
@@ -508,8 +512,6 @@ permission_denied_notice: true
 | `max_push_count_per_poll` | `int` | `5` | 单次轮询最多推送新增新闻条数。 |
 | `send_on_startup` | `bool` | `false` | 插件启动时发现缓存为空是否推送最新新闻。默认关闭避免重启刷屏。 |
 | `mark_existing_as_seen_on_startup` | `bool` | `true` | 首次启动或缓存为空时，将当前新闻标记为已见，不作为新增推送。 |
-| `allow_group_admin_manage_subscription` | `bool` | `false` | 是否允许群管理员开关本群推送。 |
-| `allow_group_admin_check_update` | `bool` | `false` | 是否允许群管理员手动检查更新。 |
 | `request_timeout_seconds` | `int` | `15` | 官网接口请求超时时间。 |
 | `request_verify_ssl` | `bool` | `false` | 是否校验 SSL 证书。参考实现中关闭校验，正式实现可按环境调整。 |
 | `request_proxy` | `string` | `""` | 请求代理，空字符串表示不使用代理。 |
@@ -521,6 +523,7 @@ permission_denied_notice: true
 | `include_publish_time` | `bool` | `true` | 消息中是否包含发布时间。 |
 | `include_summary` | `bool` | `false` | 消息中是否包含摘要。默认关闭避免消息过长。 |
 | `ai_summary_enabled` | `bool` | `true` | 是否启用 `星痕新闻总结` 命令。 |
+| `auto_summary_on_push` | `bool` | `true` | 自动推送新新闻后是否继续推送该新闻 AI 总结。 |
 | `ai_summary_provider_id` | `string` | `""` | AI 总结使用的 AstrBot Chat Provider ID。留空时使用当前会话默认模型；非空时必须为已启用 Provider。 |
 | `ai_summary_max_article_chars` | `int` | `12000` | 详情页正文提交给 LLM 前的最大字符数，超出会截断。 |
 | `ai_summary_t2i_enabled` | `bool` | `true` | AI 总结结果过长时是否在插件内直接调用 AstrBot T2I 转图片。 |
@@ -561,7 +564,7 @@ permission_denied_notice: true
 ### 11.4 权限与高危操作
 
 - 清空缓存、刷新缓存、修改全局配置限制为 Bot 超级管理员。
-- 群管理员能力默认关闭，由部署者显式配置。
+- 管理推送开关、手动检查更新等操作应限制为群管理员、群主或 Bot 超级管理员。
 
 ---
 
@@ -608,19 +611,20 @@ permission_denied_notice: true
 - 新闻格式化输出：标题 + 详情链接，建议包含发布时间。
 - 自动轮询“最新”分类，默认 5 分钟一次。
 - 基于新闻 ID 去重并推送新增新闻。
+- `星痕新闻推送开启` / `星痕新闻推送关闭` 管理当前群订阅，群聊默认关闭。
 - 持久化保存已见新闻 ID 与最近新闻缓存。
 - 首次启动不推送历史新闻。
 - 基础配置项：轮询开关、轮询间隔、推送群、请求超时、最大推送条数。
 - 帮助命令。
 - `skills/SKILL.md`，用于向 AstrBot LLM 暴露插件使用说明。
 - `星痕新闻总结`、`星痕新闻总结模型`，支持详情页全文提取与 AstrBot LLM 总结。
+- 自动推送新新闻后自动生成并推送 AI 总结。
 - AI 总结结果过长时在插件内直接调用 AstrBot T2I 转图片。
 
 ### 13.2 可延后实现
 
 - 按分类查询。
 - 查询指定数量。
-- 群内命令开关推送。
 - 手动检查更新。
 - 刷新 / 清空缓存命令。
 - 封面图发送。

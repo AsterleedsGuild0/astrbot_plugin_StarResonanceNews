@@ -27,6 +27,7 @@ class NewsStore:
         self.version: int = 1
         self.seen_ids: set[str] = set()
         self.cached_items: list[dict[str, Any]] = []
+        self.subscriptions: dict[str, dict[str, Any]] = {}
         self.last_success_at: str = ""
         self.last_error: str = ""
 
@@ -43,6 +44,10 @@ class NewsStore:
             raw_seen = raw.get("seen_ids", [])
             self.seen_ids = set(str(s) for s in raw_seen if s)
             self.cached_items = list(raw.get("cache", []))
+            raw_subscriptions = raw.get("subscriptions", {})
+            self.subscriptions = (
+                raw_subscriptions if isinstance(raw_subscriptions, dict) else {}
+            )
             self.last_success_at = str(raw.get("last_success_at") or "")
             self.last_error = str(raw.get("last_error") or "")
         except Exception as exc:
@@ -57,6 +62,7 @@ class NewsStore:
             "version": self.version,
             "seen_ids": sorted(self.seen_ids),
             "cache": self.cached_items[-100:],  # Keep last 100 items
+            "subscriptions": self.subscriptions,
             "last_success_at": self.last_success_at,
             "last_error": self.last_error,
         }
@@ -68,6 +74,7 @@ class NewsStore:
     def _reset(self) -> None:
         self.seen_ids = set()
         self.cached_items = []
+        self.subscriptions = {}
         self.last_success_at = ""
         self.last_error = ""
 
@@ -133,3 +140,27 @@ class NewsStore:
     def set_last_error(self, error: str) -> None:
         """Record last fetch error message."""
         self.last_error = error
+
+    # --- Subscriptions ---
+
+    def get_enabled_subscription_sessions(self) -> list[str]:
+        return [
+            session
+            for session, data in self.subscriptions.items()
+            if isinstance(data, dict) and data.get("enabled", False)
+        ]
+
+    def is_subscription_enabled(self, session: str) -> bool:
+        data = self.subscriptions.get(session, {})
+        return isinstance(data, dict) and bool(data.get("enabled", False))
+
+    def set_subscription(self, session: str, enabled: bool) -> None:
+        session = str(session or "").strip()
+        if not session:
+            return
+        data = self.subscriptions.get(session, {})
+        if not isinstance(data, dict):
+            data = {}
+        data["enabled"] = enabled
+        data["updated_at"] = datetime.now(timezone.utc).isoformat()
+        self.subscriptions[session] = data
