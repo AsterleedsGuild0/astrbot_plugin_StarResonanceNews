@@ -13,6 +13,7 @@
 - 接口失败时，手动查询可回退到最近缓存数据。
 - 管理员可查看推送状态，并手动检查更新。
 - 提取官网新闻详情页全文，并调用 AstrBot 已启用的默认或指定 Chat Provider 生成 AI 总结。
+- AI 总结较长时可交给 AstrBot 默认 T2I 管线渲染成图片，减少群聊刷屏。
 
 ---
 
@@ -56,6 +57,7 @@
 - `星痕新闻总结 <新闻详情链接>` 直接总结指定链接。
 - `星痕新闻总结模型` 只列出 AstrBot 当前已启用并加载成功的 Chat Provider，不列出未启用模型。
 - AI 总结只基于详情页提取出的正文，不应承诺正文外信息。
+- 如果总结较长，插件会根据配置尝试用 AstrBot T2I 转图片；T2I 失败时会回退文本。
 
 ### 查看推送状态
 
@@ -100,6 +102,8 @@
 - `ai_summary_enabled`：是否启用 AI 总结命令。
 - `ai_summary_provider_id`：AI 总结使用的 AstrBot Chat Provider ID。留空时使用当前会话默认模型；非空时必须是 AstrBot 已启用并加载成功的 Chat Provider。
 - `ai_summary_max_article_chars`：详情页正文交给模型前的最大字符数。
+- `ai_summary_t2i_enabled`：AI 总结结果过长时是否使用 AstrBot 默认 T2I 管线转图片。
+- `ai_summary_t2i_threshold`：AI 总结结果达到该字符数时转图片。设为 0 表示所有总结都转图片。
 - `ai_summary_prompt`：AI 总结提示词。
 
 当用户想让插件自动推送到某个群时，应提醒管理员在 WebUI 配置 `target_sessions`，或配置 `push_groups` 与 `platform_name`。
@@ -151,6 +155,7 @@
 
 ```text
 可以发送「星痕新闻总结」，我会提取最新官网新闻详情页正文并调用 AstrBot 当前默认模型总结。
+如果总结较长，会按配置尝试转成图片发送。
 ```
 
 用户要求换一个总结模型：

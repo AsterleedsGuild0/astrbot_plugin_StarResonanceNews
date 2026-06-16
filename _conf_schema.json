@@ -98,6 +98,19 @@
     "slider": { "min": 1000, "max": 50000, "step": 1000 },
     "hint": "详情页正文过长时会截断后再交给模型，避免上下文过长。"
   },
+  "ai_summary_t2i_enabled": {
+    "description": "AI 总结过长时转图片",
+    "type": "bool",
+    "default": true,
+    "hint": "启用后，AI 总结结果达到阈值时会强制使用 AstrBot 默认 T2I 管线渲染为图片；T2I 失败时由 AstrBot 核心回退文本。"
+  },
+  "ai_summary_t2i_threshold": {
+    "description": "AI 总结转图片阈值",
+    "type": "int",
+    "default": 800,
+    "slider": { "min": 0, "max": 5000, "step": 100 },
+    "hint": "总结文本长度达到该字符数时转图片。设为 0 表示所有 AI 总结都转图片。"
+  },
   "ai_summary_prompt": {
     "description": "AI 总结提示词",
     "type": "text",

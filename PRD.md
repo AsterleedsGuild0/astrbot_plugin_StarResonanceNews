@@ -21,6 +21,7 @@
 - 支持按固定间隔自动检测官网新闻更新，并推送新增新闻。
 - 支持对新闻分类、轮询间隔、推送目标、启动行为等进行配置。
 - 支持提取新闻详情页正文，并调用 AstrBot 已启用的默认或指定 Chat Provider 生成 AI 总结。
+- 支持 AI 总结过长时接入 AstrBot 默认 T2I 管线转图片，减少长文本刷屏。
 - 插件重启后不重复推送旧新闻，避免刷屏。
 - 兼容 AstrBot 插件体系，尽量保持实现轻量、可维护。
 - 提供插件随包 `skills/SKILL.md`，让 AstrBot LLM 能感知插件用途、命令、配置方式和当前限制。
@@ -36,6 +37,7 @@
 - 首版不做复杂内容审核或敏感词系统，仅提供基础长度、数量和频率限制。
 - 首版不主动破解、绕过数据源接口限制；若接口变更，应通过配置或代码更新适配。
 - AI 总结只基于官网详情页提取出的文本，不保证等同官方摘要，也不补充正文外信息。
+- 首版不自建 T2I 服务客户端，优先复用 AstrBot 核心 `use_t2i(True)` 管线。
 
 ---
 
@@ -309,6 +311,9 @@
 - 插件先请求新闻详情页，提取可见正文文本，再调用 AstrBot LLM 总结。
 - 正文超过 `ai_summary_max_article_chars` 时截断后再提交给 LLM。
 - AI 总结提示词由 `ai_summary_prompt` 配置。
+- 当 AI 总结结果长度达到 `ai_summary_t2i_threshold` 且 `ai_summary_t2i_enabled` 为 `true` 时，消息结果应设置 `use_t2i(True)`，交给 AstrBot 默认 T2I 管线渲染为图片。
+- T2I 端点、模板、remote/local 策略沿用 AstrBot 全局配置，不在插件内重复配置。
+- 若 AstrBot T2I 失败，应允许核心回退为文本发送，并在日志中保留 T2I 错误。
 
 模型选择：
 
@@ -483,6 +488,8 @@ include_summary: false
 ai_summary_enabled: true
 ai_summary_provider_id: ""
 ai_summary_max_article_chars: 12000
+ai_summary_t2i_enabled: true
+ai_summary_t2i_threshold: 800
 ai_summary_prompt: "请用中文总结以下《星痕共鸣》官网新闻。要求：..."
 permission_denied_notice: true
 ```
@@ -515,6 +522,8 @@ permission_denied_notice: true
 | `ai_summary_enabled` | `bool` | `true` | 是否启用 `星痕新闻总结` 命令。 |
 | `ai_summary_provider_id` | `string` | `""` | AI 总结使用的 AstrBot Chat Provider ID。留空时使用当前会话默认模型；非空时必须为已启用 Provider。 |
 | `ai_summary_max_article_chars` | `int` | `12000` | 详情页正文提交给 LLM 前的最大字符数，超出会截断。 |
+| `ai_summary_t2i_enabled` | `bool` | `true` | AI 总结结果过长时是否强制使用 AstrBot T2I 管线转图片。 |
+| `ai_summary_t2i_threshold` | `int` | `800` | AI 总结结果达到该字符数时转图片。0 表示所有 AI 总结都转图片。 |
 | `ai_summary_prompt` | `text` | 见示例 | AI 总结提示词。 |
 | `permission_denied_notice` | `bool` | `true` | 权限不足时是否发送提示。 |
 
@@ -604,6 +613,7 @@ permission_denied_notice: true
 - 帮助命令。
 - `skills/SKILL.md`，用于向 AstrBot LLM 暴露插件使用说明。
 - `星痕新闻总结`、`星痕新闻总结模型`，支持详情页全文提取与 AstrBot LLM 总结。
+- AI 总结结果过长时通过 AstrBot 默认 T2I 管线转图片。
 
 ### 13.2 可延后实现
 

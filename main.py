@@ -6,6 +6,7 @@ from typing import Any
 import astrbot.api.message_components as Comp
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, MessageChain, filter
+from astrbot.api.event import MessageEventResult
 from astrbot.api.star import Context, Star, StarTools
 
 from .core.spider import CnSpider, NewsItem
@@ -224,7 +225,9 @@ class StarResonanceNewsPlugin(Star):
 
         if message == SUMMARY_COMMAND or message.startswith(f"{SUMMARY_COMMAND} "):
             event.stop_event()
-            yield event.plain_result(await self._summarize_news(event, message))
+            yield self._summary_result(
+                event, await self._summarize_news(event, message)
+            )
             return
 
         if message == "星痕新闻总结模型":
@@ -283,8 +286,9 @@ class StarResonanceNewsPlugin(Star):
     @filter.command(SUMMARY_COMMAND)
     async def summarize_news(self, event: AstrMessageEvent):
         """提取新闻详情页全文，并调用 AstrBot 已启用的 LLM 总结。"""
-        yield event.plain_result(
-            await self._summarize_news(event, (event.get_message_str() or "").strip())
+        yield self._summary_result(
+            event,
+            await self._summarize_news(event, (event.get_message_str() or "").strip()),
         )
 
     @filter.command("星痕新闻总结模型")
@@ -377,8 +381,18 @@ class StarResonanceNewsPlugin(Star):
                 f"最近错误: {self.store.last_error or '无'}",
                 f"AI总结: {bool(self.config.get('ai_summary_enabled', True))}",
                 f"AI总结模型: {summary_provider_id or '当前会话默认模型'}",
+                f"AI总结转图片: {bool(self.config.get('ai_summary_t2i_enabled', True))}",
             ]
         )
+
+    def _summary_result(self, event: AstrMessageEvent, text: str) -> MessageEventResult:
+        result = event.plain_result(text)
+        if not self.config.get("ai_summary_t2i_enabled", True):
+            return result
+        threshold = max(0, int(self.config.get("ai_summary_t2i_threshold", 800)))
+        if len(text) >= threshold:
+            result.use_t2i(True)
+        return result
 
     async def _summarize_news(self, event: AstrMessageEvent, message: str) -> str:
         if not self.config.get("ai_summary_enabled", True):
